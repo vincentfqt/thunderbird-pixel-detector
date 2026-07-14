@@ -1,0 +1,27 @@
+{
+	"name": "thunderbird-pixel-detector",
+	"private": true,
+	"version": "0.0.0",
+	"type": "module",
+	"scripts": {
+		"dev": "vite",
+		"build": "tsc --noEmit && vite build",
+		"build:watch": "vite build --watch",
+		"lint": "biome check .",
+		"format": "biome format --write .",
+		"check": "biome check --write .",
+		"test": "vitest",
+		"tb": "pnpm build",
+		"tb:lint": "pnpm build && web-ext lint --source-dir=dist",
+		"tb:build": "pnpm build && web-ext build --source-dir=dist --artifacts-dir=artifacts"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.5.3",
+		"@types/firefox-webext-browser": "^143.0.0",
+		"@types/node": "^26.1.1",
+		"typescript": "~6.0.2",
+		"vite": "^8.1.1",
+		"vitest": "^4.1.10",
+		"web-ext": "^10.5.0"
+	}
+}

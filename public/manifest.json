@@ -1,0 +1,21 @@
+{
+	"manifest_version": 3,
+	"name": "Thunderbird Pixel Detector",
+	"description": "Détecte les pixels de suivi présents dans les courriels.",
+	"version": "0.1.0",
+	"browser_specific_settings": {
+		"gecko": {
+			"id": "thunderbird-pixel-detector@vincentfqt.dev",
+			"strict_min_version": "128.0"
+		}
+	},
+	"permissions": ["messagesRead"],
+	"background": {
+		"scripts": ["assets/background.js"],
+		"type": "module"
+	},
+	"action": {
+		"default_title": "Pixel Detector",
+		"default_popup": "popup/index.html"
+	}
+}
