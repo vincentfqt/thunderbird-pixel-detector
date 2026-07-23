@@ -13,7 +13,10 @@
 		"test": "vitest",
 		"tb": "pnpm build",
 		"tb:lint": "pnpm build && web-ext lint --source-dir=dist",
-		"tb:build": "pnpm build && web-ext build --source-dir=dist --artifacts-dir=artifacts"
+		"tb:build": "pnpm build && web-ext build --source-dir=dist --artifacts-dir=artifacts",
+		"release:patch": "pnpm version patch && pnpm tb:build",
+		"release:minor": "pnpm version minor && pnpm tb:build",
+		"release:major": "pnpm version major && pnpm tb:build"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.5.3",
