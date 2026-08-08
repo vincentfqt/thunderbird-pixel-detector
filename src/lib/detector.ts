@@ -1,9 +1,9 @@
 // src/lib/detector.ts
 // Détection des pixels de suivi dans le HTML d'un email.
 //
-// Principe : on analyse uniquement le HTML du message. On ne charge JAMAIS
-// les images distantes : les charger reviendrait à prévenir le serveur de
-// suivi que l'email a été ouvert.
+// Les contenus distants analysés sont les balises <img> et les images de fond
+// CSS (background-image). On ne charge JAMAIS ces contenus : les charger
+// reviendrait à prévenir le serveur de suivi que l'email a été ouvert.
 
 export interface TrackingPixel {
 	url: string;
