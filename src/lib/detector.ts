@@ -102,8 +102,11 @@ interface ExtractedImage {
  */
 export function detectTrackingPixels(html: string): AnalysisResult {
 	const images = extractRemoteImages(html);
+	// Un style global (ex. img { display:none }) masque toutes les images :
+	// on le passe à chaque image analysée.
+	const globalCssReason = findGlobalCssHiding(html);
 	const trackingPixels = images
-		.map(analyzeImage)
+		.map((image) => analyzeImage(image, globalCssReason))
 		.filter((pixel): pixel is TrackingPixel => pixel !== null);
 
 	return {
@@ -185,10 +188,15 @@ function extractRemoteImages(html: string): ExtractedImage[] {
  * Analyse une image et renvoie un pixel de suivi si elle semble suspecte,
  * sinon null.
  */
-function analyzeImage(image: ExtractedImage): TrackingPixel | null {
+function analyzeImage(
+	image: ExtractedImage,
+	globalCssReason: string | null,
+): TrackingPixel | null {
 	const isOneByOne = image.width === 1 && image.height === 1;
 	// Une image déjà 1×1 est signalée : inutile d'ajouter une raison CSS en plus.
-	const hiddenReason = isOneByOne ? null : cssHiddenReason(image.style);
+	const hiddenReason = isOneByOne
+		? null
+		: (inlineCssHiddenReason(image.style) ?? globalCssReason);
 	const fileName = suspiciousFileName(image.url);
 	const reasons: string[] = [];
 
@@ -249,22 +257,24 @@ function extractSrcsetUrls(srcset: string | null): string[] {
 }
 
 /**
- * Raison de signalement si le style CSS rend l'image invisible, sinon null.
- * Les trackers ne font pas que du 1×1 : ils masquent aussi leurs pixels avec
- * display: none, une opacité nulle ou des dimensions CSS minuscules.
+ * Raison de signalement si le style CSS rend l'élément invisible, sinon null.
+ * Renvoie le détail ("display: none", "opacity: 0"…) : l'appelant le met en
+ * forme ("Masquée par CSS (…)", "Masquée par CSS global (…)"). Les trackers
+ * ne font pas que du 1×1 : ils masquent aussi leurs pixels avec display: none,
+ * une opacité nulle ou des dimensions CSS minuscules.
  */
 function cssHiddenReason(style: string | null): string | null {
 	if (style === null) return null;
 	const css = style.toLowerCase();
 
 	if (hasCssDeclaration(css, "display", "none")) {
-		return "Masquée par CSS (display: none)";
+		return "display: none";
 	}
 	if (hasCssDeclaration(css, "visibility", "hidden")) {
-		return "Masquée par CSS (visibility: hidden)";
+		return "visibility: hidden";
 	}
 	if (hasCssDeclaration(css, "opacity", "0(\\.0+)?")) {
-		return "Masquée par CSS (opacity: 0)";
+		return "opacity: 0";
 	}
 
 	const hasTinyCssSize = ["width", "height", "max-width", "max-height"].some(
@@ -278,15 +288,75 @@ function cssHiddenReason(style: string | null): string | null {
 	return null;
 }
 
+/** Raison de masquage d'un style inline (style="…"), sinon null. */
+function inlineCssHiddenReason(style: string | null): string | null {
+	const detail = cssHiddenReason(style);
+	return detail === null ? null : `Masquée par CSS (${detail})`;
+}
+
+/**
+ * Style global (<style>) qui masque les images (ex. img { display: none }),
+ * sinon null. Les règles @media sont ignorées : cacher des éléments sur petit
+ * écran est un usage responsive légitime des newsletters.
+ */
+function findGlobalCssHiding(html: string): string | null {
+	for (const match of html.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style\s*>/gi)) {
+		const css = stripMediaQueries(match[1] ?? "");
+
+		for (const rule of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+			const selector = rule[1] ?? "";
+			// La règle doit cibler les images (img, table img, …).
+			if (!/\bimg\b/i.test(selector)) continue;
+
+			const detail = cssHiddenReason(rule[2] ?? null);
+			if (detail !== null) {
+				return `Masquée par CSS global (${detail})`;
+			}
+		}
+	}
+	return null;
+}
+
+/**
+ * Retire les blocs @media (…){…} du CSS. Les accolades des règles internes
+ * sont comptées pour trouver la fin du bloc.
+ */
+function stripMediaQueries(css: string): string {
+	let result = "";
+	let depth = 0;
+
+	for (let i = 0; i < css.length; i++) {
+		if (depth > 0) {
+			const char = css[i];
+			if (char === "{") depth++;
+			else if (char === "}") depth--;
+			continue;
+		}
+
+		const mediaStart = css.indexOf("@media", i);
+		if (mediaStart === -1) {
+			return result + css.slice(i);
+		}
+
+		result += css.slice(i, mediaStart);
+		const openBrace = css.indexOf("{", mediaStart);
+		if (openBrace === -1) return result;
+		depth = 1;
+		i = openBrace;
+	}
+
+	return result;
+}
+
 /** true si le style contient `propriété: valeur` (suivi de ; ! ou de la fin). */
 function hasCssDeclaration(
 	style: string,
 	property: string,
 	value: string,
 ): boolean {
-	return new RegExp(`(?:^|;)\\s*${property}\\s*:\\s*${value}(?:[;!]|$)`).test(
-		style,
-	);
+	return new RegExp(
+		`(?:^|;)\\s*${property}\\s*:\\s*${value}\\s*(?:[;!]|$)`,
+	).test(style);
 }
 
 /** Valeur numérique d'une propriété CSS (ex. "1px" → 1), sinon null. */

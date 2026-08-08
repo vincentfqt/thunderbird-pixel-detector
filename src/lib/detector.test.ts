@@ -115,7 +115,9 @@ describe("detectTrackingPixels", () => {
 
 		const { trackingPixels } = detectTrackingPixels(html);
 		expect(trackingPixels).toHaveLength(1);
-		expect(trackingPixels[0].reasons).toContain("Dimensions CSS minuscules");
+		expect(trackingPixels[0].reasons).toContain(
+			"Masquée par CSS (Dimensions CSS minuscules)",
+		);
 	});
 
 	it("détecte une image invisible via opacity: 0", () => {
@@ -167,6 +169,36 @@ describe("detectTrackingPixels", () => {
 		const html =
 			`<img src="//cdn.legitime.fr/img/logo.png" width="300" height="80" ` +
 			`alt="Logo">`;
+
+		expect(detectTrackingPixels(html).trackingPixels).toHaveLength(0);
+	});
+
+	it("détecte une image masquée par un style global (<style>img{display:none})", () => {
+		const html =
+			`<style>img { display: none }</style>` +
+			`<img src="https://example.com/photo.png" alt="Photo">`;
+
+		const { trackingPixels } = detectTrackingPixels(html);
+		expect(trackingPixels).toHaveLength(1);
+		expect(trackingPixels[0].reasons).toContain(
+			"Masquée par CSS global (display: none)",
+		);
+	});
+
+	it("ignore les règles @media : masquer des éléments sur mobile est légitime", () => {
+		const html =
+			`<style>@media (max-width: 600px) { img { display: none } }</style>` +
+			`<img src="https://cdn.legitime.fr/img/logo.png" width="300" ` +
+			`height="80" alt="Logo">`;
+
+		expect(detectTrackingPixels(html).trackingPixels).toHaveLength(0);
+	});
+
+	it("ne signale pas une image quand le style global ne la masque pas", () => {
+		const html =
+			`<style>img { border-radius: 8px }</style>` +
+			`<img src="https://cdn.legitime.fr/img/logo.png" width="300" ` +
+			`height="80" alt="Logo">`;
 
 		expect(detectTrackingPixels(html).trackingPixels).toHaveLength(0);
 	});
