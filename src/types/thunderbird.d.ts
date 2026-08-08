@@ -63,6 +63,18 @@ interface ThunderbirdApi {
 	messages: {
 		getFull(messageId: number): Promise<ThunderbirdMessagePart>;
 	};
+	messageDisplayAction: {
+		setBadgeText(details: {
+			tabId?: number;
+			text: string | null;
+		}): Promise<void>;
+		setBadgeBackgroundColor(details: {
+			tabId?: number;
+			color: string | null;
+		}): Promise<void>;
+		setLabel(details: { tabId?: number; label: string | null }): Promise<void>;
+		setTitle(details: { tabId?: number; title: string | null }): Promise<void>;
+	};
 }
 
 declare const messenger: typeof browser & ThunderbirdApi;

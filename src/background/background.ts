@@ -9,6 +9,16 @@ type PopupMessage = {
 	type: "ANALYZE_CURRENT_MESSAGE";
 };
 
+/**
+ * Résultat de l'analyse avec l'onglet de messagerie concerné.
+ * L'onglet est nécessaire pour mettre à jour le bouton d'en-tête
+ * du message (messageDisplayAction) pour le bon onglet.
+ */
+type AnalysisContext = {
+	mailTab?: ThunderbirdMailTab;
+	result: AnalysisResult;
+};
+
 console.info("Thunderbird Pixel Detector démarré");
 
 messenger.runtime.onInstalled.addListener(() => {
@@ -21,56 +31,75 @@ messenger.runtime.onMessage.addListener((message: PopupMessage) => {
 	}
 
 	// La Promise renvoyée sert de réponse au popup (runtime.sendMessage).
-	return analyzeAndUpdateBadge();
+	return analyzeCurrentMessage().then(analyzeAndUpdateBadge);
 });
 
 // Analyse automatique à chaque affichage d'un message, pour mettre à jour
-// le badge de l'icône sans action de l'utilisateur.
+// les indicateurs sans action de l'utilisateur.
 let autoAnalyzeTimer: ReturnType<typeof setTimeout> | undefined;
 
-messenger.messageDisplay.onMessagesDisplayed.addListener(() => {
-	if (autoAnalyzeTimer !== undefined) {
-		clearTimeout(autoAnalyzeTimer);
-	}
+messenger.messageDisplay.onMessagesDisplayed.addListener(
+	(tab, displayedMessages) => {
+		if (autoAnalyzeTimer !== undefined) {
+			clearTimeout(autoAnalyzeTimer);
+		}
 
-	autoAnalyzeTimer = setTimeout(() => {
-		void analyzeAndUpdateBadge().catch((error) => {
-			console.error("Échec de l'analyse automatique", error);
-		});
-	}, 300);
-});
+		autoAnalyzeTimer = setTimeout(() => {
+			void analyzeMessage(tab, displayedMessages.messages[0])
+				.then(analyzeAndUpdateBadge)
+				.catch((error) => {
+					console.error("Échec de l'analyse automatique", error);
+				});
+		}, 300);
+	},
+);
 
-/** Analyse le message affiché puis met à jour le badge. */
-async function analyzeAndUpdateBadge(): Promise<AnalysisResult> {
-	const result = await analyzeDisplayedMessage();
-	await updateBadge(result);
-	return result;
+/**
+ * Analyse le message affiché puis met à jour les indicateurs.
+ * Renvoie le résultat pour que le popup puisse l'afficher.
+ */
+async function analyzeAndUpdateBadge(
+	context: AnalysisContext,
+): Promise<AnalysisResult> {
+	await updateBadge(context);
+	return context.result;
 }
 
-/** Récupère le message affiché et détecte ses pixels de suivi. */
-async function analyzeDisplayedMessage(): Promise<AnalysisResult> {
-	// Le message affiché vit dans l'onglet de messagerie courant (3-panes).
+/**
+ * Récupère le message affiché dans l'onglet de messagerie courant.
+ * Utilisé par le popup, qui n'a pas accès à l'événement onMessagesDisplayed.
+ */
+async function analyzeCurrentMessage(): Promise<AnalysisContext> {
 	const [mailTab] = await messenger.mailTabs.query({
 		active: true,
 		currentWindow: true,
 	});
 
 	if (mailTab === undefined) {
-		return emptyResult("Aucun onglet de messagerie ouvert.");
+		return { result: emptyResult("Aucun onglet de messagerie ouvert.") };
 	}
 
 	const { messages } = await messenger.messageDisplay.getDisplayedMessages(
 		mailTab.tabId,
 	);
-	const header = messages[0];
+	return analyzeMessage(mailTab, messages[0]);
+}
 
+/**
+ * Analyse le contenu HTML d'un message affiché.
+ * Détection pure : aucun contenu distant n'est chargé.
+ */
+async function analyzeMessage(
+	mailTab: ThunderbirdMailTab,
+	header: ThunderbirdMessageHeader | undefined,
+): Promise<AnalysisContext> {
 	if (header === undefined) {
-		return emptyResult("Aucun message affiché.");
+		return { mailTab, result: emptyResult("Aucun message affiché.") };
 	}
 
 	const message = await messenger.messages.getFull(header.id);
 	const html = findHtmlBody(message) ?? "";
-	return detectTrackingPixels(html);
+	return { mailTab, result: detectTrackingPixels(html) };
 }
 
 /** Résultat vide accompagné d'un message d'erreur. */
@@ -82,15 +111,47 @@ function emptyResult(error: string): AnalysisResult {
 	};
 }
 
-/** Affiche le nombre de pixels détectés sur l'icône de l'extension. */
-async function updateBadge(result: AnalysisResult): Promise<void> {
+/**
+ * Met à jour les indicateurs visibles :
+ * - le badge de l'icône de l'extension (barre d'outils) ;
+ * - le bouton d'en-tête du message affiché (messageDisplayAction).
+ */
+async function updateBadge(context: AnalysisContext): Promise<void> {
+	const { result, mailTab } = context;
 	const count = result.trackingPixels.length;
 
-	await messenger.action.setBadgeText({
-		text: count > 0 ? String(count) : "",
-	});
-
+	// Badge de l'icône : rouge avec le nombre de pixels, sinon rien.
+	const badgeText = count > 0 ? String(count) : "";
+	await messenger.action.setBadgeText({ text: badgeText });
 	if (count > 0) {
 		await messenger.action.setBadgeBackgroundColor({ color: "#d32f2f" });
 	}
+
+	// Sans onglet ou sans analyse, il n'y a rien à indiquer sur l'en-tête.
+	if (mailTab === undefined || result.error !== undefined) {
+		return;
+	}
+
+	// Bouton d'en-tête du message : badge vert « 0 » si le message est sûr,
+	// rouge avec le nombre de pixels sinon. Le label précise l'état.
+	const { tabId } = mailTab;
+	await messenger.messageDisplayAction.setBadgeText({
+		tabId,
+		text: String(count),
+	});
+	await messenger.messageDisplayAction.setBadgeBackgroundColor({
+		tabId,
+		color: count > 0 ? "#d32f2f" : "#2e7d32",
+	});
+	await messenger.messageDisplayAction.setLabel({
+		tabId,
+		label: count > 0 ? `${count} pixel(s)` : "Sûr",
+	});
+	await messenger.messageDisplayAction.setTitle({
+		tabId,
+		title:
+			count > 0
+				? `${count} pixel(s) de suivi détecté(s). Cliquez pour le détail.`
+				: "Aucun pixel de suivi détecté. Cliquez pour le détail.",
+	});
 }
