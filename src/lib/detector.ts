@@ -5,44 +5,21 @@
 // CSS (background-image). On ne charge JAMAIS ces contenus : les charger
 // reviendrait à prévenir le serveur de suivi que l'email a été ouvert.
 
-export interface TrackingPixel {
-	url: string;
-	width: number | null;
-	height: number | null;
-	/** Pourquoi cette image est considérée comme un pixel. */
-	reasons: string[];
-}
+// Les modèles (TrackingPixel, AnalysisResult…) sont définis dans src/models/ et
+// ré-exportés ici : le reste de l'app continue d'importer depuis lib/detector.
+import type {
+	AnalysisResult,
+	TrackingLink,
+	TrackingPixel,
+	TrackingResource,
+} from "../models/tracking";
 
-export interface AnalysisResult {
-	/** Nombre total d'images distantes dans le message. */
-	remoteImageCount: number;
-	/** Images classées comme pixels de suivi. */
-	trackingPixels: TrackingPixel[];
-	/** Liens <a href> classés comme liens de suivi des clics. */
-	trackingLinks: TrackingLink[];
-	/** Ressources distantes non-image classées comme suspectes. */
-	trackingResources: TrackingResource[];
-	/** true si le message demande un accusé de réception (Return-Receipt-To…). */
-	readReceiptRequested?: boolean;
-	/** Erreur éventuelle (ex. aucun message affiché). */
-	error?: string;
-}
-
-/** Lien de suivi des clics détecté dans un <a href>. */
-export interface TrackingLink {
-	url: string;
-	/** Pourquoi ce lien est considéré comme un lien de suivi. */
-	reasons: string[];
-}
-
-/** Ressource distante non-image suspecte (iframe, link, embed…). */
-export interface TrackingResource {
-	url: string;
-	width: number | null;
-	height: number | null;
-	/** Pourquoi cette ressource est considérée comme suspecte. */
-	reasons: string[];
-}
+export type {
+	AnalysisResult,
+	TrackingLink,
+	TrackingPixel,
+	TrackingResource,
+} from "../models/tracking";
 
 // Mot-clés présents dans les domaines, chemins ou noms de fichiers utilisés
 // par les plateformes de tracking d'emails. La recherche est volontairement
