@@ -248,3 +248,26 @@ function parseUrl(url: string): URL | null {
 		return null;
 	}
 }
+
+// --- Corps du message --------------------------------------------------------
+
+/**
+ * Cherche le corps HTML dans la structure renvoyée par messages.getFull
+ * (qui peut être multipart). Renvoie null si le message n'a pas de partie HTML.
+ */
+export function findHtmlBody(part: ThunderbirdMessagePart): string | null {
+	const contentType = part.contentType?.toLowerCase() ?? "";
+
+	if (contentType.includes("text/html")) {
+		return part.body ?? null;
+	}
+
+	if (contentType.includes("multipart")) {
+		for (const child of part.parts ?? []) {
+			const body = findHtmlBody(child);
+			if (body !== null) return body;
+		}
+	}
+
+	return null;
+}

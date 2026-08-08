@@ -1,5 +1,9 @@
 // src/background/background.ts
-import { type AnalysisResult, detectTrackingPixels } from "../lib/detector";
+import {
+	type AnalysisResult,
+	detectTrackingPixels,
+	findHtmlBody,
+} from "../lib/detector";
 
 type PopupMessage = {
 	type: "ANALYZE_CURRENT_MESSAGE";
@@ -59,27 +63,6 @@ async function analyzeDisplayedMessage(): Promise<AnalysisResult> {
 	const message = await messenger.messages.getFull(header.id);
 	const html = findHtmlBody(message) ?? "";
 	return detectTrackingPixels(html);
-}
-
-/**
- * Cherche le corps HTML dans la structure renvoyée par messages.getFull
- * (qui peut être multipart).
- */
-function findHtmlBody(part: ThunderbirdMessagePart): string | null {
-	const contentType = part.contentType?.toLowerCase() ?? "";
-
-	if (contentType.includes("text/html")) {
-		return part.body ?? null;
-	}
-
-	if (contentType.includes("multipart")) {
-		for (const child of part.parts ?? []) {
-			const body = findHtmlBody(child);
-			if (body !== null) return body;
-		}
-	}
-
-	return null;
 }
 
 /** Affiche le nombre de pixels détectés sur l'icône de l'extension. */
