@@ -22,6 +22,8 @@ export interface AnalysisResult {
 	trackingLinks: TrackingLink[];
 	/** Ressources distantes non-image classées comme suspectes. */
 	trackingResources: TrackingResource[];
+	/** true si le message demande un accusé de réception (Return-Receipt-To…). */
+	readReceiptRequested?: boolean;
 	/** Erreur éventuelle (ex. aucun message affiché). */
 	error?: string;
 }
@@ -661,4 +663,26 @@ export function findHtmlBody(part: ThunderbirdMessagePart): string | null {
 	}
 
 	return null;
+}
+
+// --- Accusés de réception -----------------------------------------------------
+
+// En-têtes demandant un accusé de réception : le client mail (ex. Outlook)
+// renvoie une confirmation d'ouverture à l'expéditeur, sans aucun HTML. C'est
+// une forme de suivi sans pixel.
+const READ_RECEIPT_HEADERS = [
+	"return-receipt-to",
+	"disposition-notification-to",
+];
+
+/**
+ * true si le message demande un accusé de réception (Return-Receipt-To ou
+ * Disposition-Notification-To), ce qui confirme son ouverture à l'expéditeur.
+ */
+export function readReceiptRequested(part: ThunderbirdMessagePart): boolean {
+	const headers = part.headers ?? {};
+	return Object.entries(headers).some(
+		([name, values]) =>
+			READ_RECEIPT_HEADERS.includes(name.toLowerCase()) && values.length > 0,
+	);
 }

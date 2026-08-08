@@ -3,6 +3,7 @@ import {
 	type AnalysisResult,
 	detectTrackingThreats,
 	findHtmlBody,
+	readReceiptRequested,
 } from "../lib/detector";
 
 type PopupMessage = {
@@ -99,7 +100,14 @@ async function analyzeMessage(
 
 	const message = await messenger.messages.getFull(header.id);
 	const html = findHtmlBody(message) ?? "";
-	return { mailTab, result: detectTrackingThreats(html) };
+	return {
+		mailTab,
+		result: {
+			...detectTrackingThreats(html),
+			// Les en-têtes MIME (accusés de réception) ne sont pas dans le HTML.
+			readReceiptRequested: readReceiptRequested(message),
+		},
+	};
 }
 
 /** Résultat vide accompagné d'un message d'erreur. */
@@ -124,8 +132,11 @@ async function updateBadge(context: AnalysisContext): Promise<void> {
 		result.trackingPixels.length +
 		result.trackingLinks.length +
 		result.trackingResources.length;
+	// Un accusé de réception mérite aussi l'attention : c'est une confirmation
+	// d'ouverture sans pixel.
+	const needsAttention = count > 0 || result.readReceiptRequested === true;
 
-	// Badge de l'icône : rouge avec le nombre de pixels, sinon rien.
+	// Badge de l'icône : rouge avec le nombre de menaces, sinon rien.
 	const badgeText = count > 0 ? String(count) : "";
 	await messenger.action.setBadgeText({ text: badgeText });
 	if (count > 0) {
@@ -146,17 +157,24 @@ async function updateBadge(context: AnalysisContext): Promise<void> {
 	});
 	await messenger.messageDisplayAction.setBadgeBackgroundColor({
 		tabId,
-		color: count > 0 ? "#d32f2f" : "#2e7d32",
+		color: needsAttention ? "#d32f2f" : "#2e7d32",
 	});
 	await messenger.messageDisplayAction.setLabel({
 		tabId,
-		label: count > 0 ? `${count} menace(s)` : "Sûr",
+		label:
+			count > 0
+				? `${count} menace(s)`
+				: result.readReceiptRequested
+					? "Accusé de réception"
+					: "Sûr",
 	});
 	await messenger.messageDisplayAction.setTitle({
 		tabId,
 		title:
 			count > 0
 				? `${count} menace(s) de suivi détectée(s). Cliquez pour le détail.`
-				: "Aucun pixel de suivi détecté. Cliquez pour le détail.",
+				: result.readReceiptRequested
+					? "Ce message demande un accusé de réception : l'ouverture peut être confirmée à l'expéditeur."
+					: "Aucun pixel de suivi détecté. Cliquez pour le détail.",
 	});
 }

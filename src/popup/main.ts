@@ -72,9 +72,18 @@ function render(result: AnalysisResult): void {
 			? "Aucun pixel de suivi détecté."
 			: `${totalThreats} menace(s) de suivi détectée(s) sur ${remoteImageCount} image(s) distante(s).`;
 
+	// Un accusé de réception n'est pas un pixel, mais il confirme l'ouverture
+	// du message à l'expéditeur : c'est une forme de suivi à signaler.
+	const receiptWarning =
+		result.readReceiptRequested === true
+			? `<p class="warn">⚠️ Ce message demande un accusé de réception : l'ouverture peut être confirmée à l'expéditeur (Return-Receipt-To / Disposition-Notification-To).</p>`
+			: "";
+
 	results.hidden = false;
 	if (totalThreats === 0) {
-		results.innerHTML = `<p class="ok">Ce message semble exempt de pixel de suivi.</p>`;
+		results.innerHTML =
+			receiptWarning +
+			`<p class="ok">Ce message semble exempt de pixel de suivi.</p>`;
 		return;
 	}
 
@@ -113,7 +122,7 @@ function render(result: AnalysisResult): void {
 			),
 		);
 	}
-	results.innerHTML = sections.join("");
+	results.innerHTML = receiptWarning + sections.join("");
 }
 
 function renderSection(title: string, items: string[]): string {

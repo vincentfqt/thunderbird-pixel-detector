@@ -20,6 +20,8 @@ interface ThunderbirdMessagePart {
 	body?: string | null;
 	parts?: ThunderbirdMessagePart[];
 	partName?: string;
+	/** En-têtes MIME de la partie, clé en minuscules (ex. return-receipt-to). */
+	headers?: Record<string, string[]>;
 }
 
 /** Liste de messages renvoyée par messageDisplay.getDisplayedMessages. */

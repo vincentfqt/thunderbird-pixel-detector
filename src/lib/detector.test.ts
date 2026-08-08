@@ -1,6 +1,10 @@
 // src/lib/detector.test.ts
 import { describe, expect, it } from "vitest";
-import { detectTrackingThreats, findHtmlBody } from "./detector";
+import {
+	detectTrackingThreats,
+	findHtmlBody,
+	readReceiptRequested,
+} from "./detector";
 
 describe("detectTrackingThreats", () => {
 	it("détecte un pixel de suivi classique (1×1 + nom de fichier)", () => {
@@ -278,6 +282,42 @@ describe("detectTrackingThreats", () => {
 			`rel="stylesheet">`;
 
 		expect(detectTrackingThreats(html).trackingResources).toHaveLength(0);
+	});
+});
+
+describe("readReceiptRequested", () => {
+	it("détecte l'en-tête Return-Receipt-To", () => {
+		const part = {
+			contentType: "text/html",
+			body: "<p>Bonjour</p>",
+			headers: { "return-receipt-to": ["expediteur@example.com"] },
+		};
+		expect(readReceiptRequested(part)).toBe(true);
+	});
+
+	it("détecte l'en-tête Disposition-Notification-To", () => {
+		const part = {
+			contentType: "text/html",
+			body: "<p>Bonjour</p>",
+			headers: {
+				"disposition-notification-to": ["expediteur@example.com"],
+			},
+		};
+		expect(readReceiptRequested(part)).toBe(true);
+	});
+
+	it("renvoie false sans en-tête d'accusé de réception", () => {
+		const part = {
+			contentType: "text/html",
+			body: "<p>Bonjour</p>",
+			headers: { subject: ["Salut"] },
+		};
+		expect(readReceiptRequested(part)).toBe(false);
+	});
+
+	it("renvoie false sans en-têtes du tout", () => {
+		const part = { contentType: "text/html", body: "<p>Bonjour</p>" };
+		expect(readReceiptRequested(part)).toBe(false);
 	});
 });
 
