@@ -78,6 +78,8 @@ interface ExtractedImage {
 	url: string;
 	width: number | null;
 	height: number | null;
+	/** Attribut style de la balise, pour repérer les images masquées par CSS. */
+	style: string | null;
 }
 
 /**
@@ -111,6 +113,7 @@ function extractRemoteImages(html: string): ExtractedImage[] {
 		url: string,
 		width: string | null,
 		height: string | null,
+		style: string | null = null,
 	): void => {
 		// Une même URL revient souvent plusieurs fois : on ne l'analyse qu'une fois.
 		if (!isRemoteUrl(url) || seen.has(url)) return;
@@ -120,6 +123,7 @@ function extractRemoteImages(html: string): ExtractedImage[] {
 			url,
 			width: parseDimension(width),
 			height: parseDimension(height),
+			style,
 		});
 	};
 
@@ -130,6 +134,7 @@ function extractRemoteImages(html: string): ExtractedImage[] {
 			getAttribute(tag, "src") ?? "",
 			getAttribute(tag, "width"),
 			getAttribute(tag, "height"),
+			getAttribute(tag, "style"),
 		);
 	}
 
@@ -155,11 +160,16 @@ function extractRemoteImages(html: string): ExtractedImage[] {
  */
 function analyzeImage(image: ExtractedImage): TrackingPixel | null {
 	const isOneByOne = image.width === 1 && image.height === 1;
+	// Une image déjà 1×1 est signalée : inutile d'ajouter une raison CSS en plus.
+	const hiddenReason = isOneByOne ? null : cssHiddenReason(image.style);
 	const fileName = suspiciousFileName(image.url);
 	const reasons: string[] = [];
 
 	if (isOneByOne) {
 		reasons.push("Image de 1×1 px");
+	}
+	if (hiddenReason !== null) {
+		reasons.push(hiddenReason);
 	}
 	if (fileName !== null) {
 		reasons.push(`Nom de fichier suspect (${fileName})`);
@@ -172,9 +182,13 @@ function analyzeImage(image: ExtractedImage): TrackingPixel | null {
 		reasons.push(`Paramètres de suivi (${trackingParams.join(", ")})`);
 	}
 
-	// Un pixel est signalé s'il fait 1×1 px, s'il porte un nom de fichier
-	// typique, ou si au moins deux indices sont réunis.
-	const isSuspicious = isOneByOne || fileName !== null || reasons.length >= 2;
+	// Un pixel est signalé s'il est invisible (1×1 ou masqué par CSS), s'il
+	// porte un nom de fichier typique, ou si au moins deux indices sont réunis.
+	const isSuspicious =
+		isOneByOne ||
+		hiddenReason !== null ||
+		fileName !== null ||
+		reasons.length >= 2;
 	if (!isSuspicious) return null;
 
 	return {
@@ -196,6 +210,55 @@ function getAttribute(tag: string, name: string): string | null {
 		),
 	);
 	return match === null ? null : (match[1] ?? match[2] ?? match[3]);
+}
+
+/**
+ * Raison de signalement si le style CSS rend l'image invisible, sinon null.
+ * Les trackers ne font pas que du 1×1 : ils masquent aussi leurs pixels avec
+ * display: none, une opacité nulle ou des dimensions CSS minuscules.
+ */
+function cssHiddenReason(style: string | null): string | null {
+	if (style === null) return null;
+	const css = style.toLowerCase();
+
+	if (hasCssDeclaration(css, "display", "none")) {
+		return "Masquée par CSS (display: none)";
+	}
+	if (hasCssDeclaration(css, "visibility", "hidden")) {
+		return "Masquée par CSS (visibility: hidden)";
+	}
+	if (hasCssDeclaration(css, "opacity", "0(\\.0+)?")) {
+		return "Masquée par CSS (opacity: 0)";
+	}
+
+	const hasTinyCssSize = ["width", "height", "max-width", "max-height"].some(
+		(property) =>
+			(cssDimension(css, property) ?? Number.POSITIVE_INFINITY) <= 1,
+	);
+	if (hasTinyCssSize) {
+		return "Dimensions CSS minuscules";
+	}
+
+	return null;
+}
+
+/** true si le style contient `propriété: valeur` (suivi de ; ! ou de la fin). */
+function hasCssDeclaration(
+	style: string,
+	property: string,
+	value: string,
+): boolean {
+	return new RegExp(`(?:^|;)\\s*${property}\\s*:\\s*${value}(?:[;!]|$)`).test(
+		style,
+	);
+}
+
+/** Valeur numérique d'une propriété CSS (ex. "1px" → 1), sinon null. */
+function cssDimension(style: string, property: string): number | null {
+	const match = style.match(
+		new RegExp(`(?:^|;)\\s*${property}\\s*:\\s*([^;!]+)`),
+	);
+	return match === null ? null : parseDimension(match[1] ?? null);
 }
 
 /** Convertit "1" ou "1px" en 1 ; renvoie null si absent ou non numérique. */
