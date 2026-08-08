@@ -97,6 +97,62 @@ describe("detectTrackingPixels", () => {
 			"Paramètres de suivi (mid, email)",
 		]);
 	});
+
+	it("détecte une image masquée par CSS (display: none)", () => {
+		const html = `<img src="https://tracker.example.com/px.gif" style="display:none" alt="">`;
+
+		const { trackingPixels } = detectTrackingPixels(html);
+		expect(trackingPixels).toHaveLength(1);
+		expect(trackingPixels[0].reasons).toContain(
+			"Masquée par CSS (display: none)",
+		);
+	});
+
+	it("détecte un pixel 1×1 déclaré uniquement dans le style", () => {
+		const html =
+			`<img src="https://tracker.example.com/px.gif" ` +
+			`style="width:1px;height:1px" alt="">`;
+
+		const { trackingPixels } = detectTrackingPixels(html);
+		expect(trackingPixels).toHaveLength(1);
+		expect(trackingPixels[0].reasons).toContain("Dimensions CSS minuscules");
+	});
+
+	it("détecte une image invisible via opacity: 0", () => {
+		const html = `<img src="https://tracker.example.com/px.gif" style="opacity:0" alt="">`;
+
+		const { trackingPixels } = detectTrackingPixels(html);
+		expect(trackingPixels).toHaveLength(1);
+		expect(trackingPixels[0].reasons).toContain("Masquée par CSS (opacity: 0)");
+	});
+
+	it("ne signale pas une image stylée mais visible", () => {
+		const html =
+			`<img src="https://cdn.legitime.fr/img/photo.jpg" ` +
+			`style="border-radius:8px;width:300px" alt="Photo">`;
+
+		const { trackingPixels } = detectTrackingPixels(html);
+		expect(trackingPixels).toHaveLength(0);
+	});
+
+	it("extrait les images à chargement différé (data-src)", () => {
+		const html = `<img data-src="https://img.newsletter.fr/logo-mobile.png" alt="Logo">`;
+
+		const { remoteImageCount, trackingPixels } = detectTrackingPixels(html);
+		expect(remoteImageCount).toBe(1);
+		expect(trackingPixels).toHaveLength(0);
+	});
+
+	it("détecte un pixel déclaré dans srcset", () => {
+		const html =
+			`<img src="https://cdn.newsletter.fr/img/banner.jpg" ` +
+			`srcset="https://tracker.example.com/px.gif 1x" alt="Bannière">`;
+
+		const { remoteImageCount, trackingPixels } = detectTrackingPixels(html);
+		expect(remoteImageCount).toBe(2);
+		expect(trackingPixels).toHaveLength(1);
+		expect(trackingPixels[0].url).toBe("https://tracker.example.com/px.gif");
+	});
 });
 
 describe("findHtmlBody", () => {
