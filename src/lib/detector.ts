@@ -130,12 +130,25 @@ function extractRemoteImages(html: string): ExtractedImage[] {
 	// Balises <img>.
 	for (const match of html.matchAll(/<img\b[^>]*>/gi)) {
 		const tag = match[0];
+		const style = getAttribute(tag, "style");
+
 		addImage(
 			getAttribute(tag, "src") ?? "",
 			getAttribute(tag, "width"),
 			getAttribute(tag, "height"),
-			getAttribute(tag, "style"),
+			style,
 		);
+
+		// Images à chargement différé : l'URL réelle est ailleurs que dans src
+		// (srcset, data-src ou data-original).
+		for (const url of extractSrcsetUrls(getAttribute(tag, "srcset"))) {
+			addImage(url, null, null, style);
+		}
+		const lazySrc =
+			getAttribute(tag, "data-src") ?? getAttribute(tag, "data-original");
+		if (lazySrc !== null) {
+			addImage(lazySrc, null, null, style);
+		}
 	}
 
 	// Images de fond CSS : <div style="background-image: url(...)">.
@@ -210,6 +223,15 @@ function getAttribute(tag: string, name: string): string | null {
 		),
 	);
 	return match === null ? null : (match[1] ?? match[2] ?? match[3]);
+}
+
+/** URLs d'un attribut srcset ("url 1x, url 2x" → ["url", "url"]). */
+function extractSrcsetUrls(srcset: string | null): string[] {
+	if (srcset === null) return [];
+	return srcset
+		.split(",")
+		.map((part) => part.trim().split(/\s+/)[0])
+		.filter((url) => url !== "");
 }
 
 /**
