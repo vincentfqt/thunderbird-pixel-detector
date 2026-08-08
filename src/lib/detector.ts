@@ -42,6 +42,8 @@ const TRACKING_WORDS = [
 ];
 
 // Paramètres d'URL typiques d'un pixel de suivi (ex. ?open=…&mid=…).
+// La liste s'appuie sur les paramètres observés chez les plateformes de
+// tracking d'emails (voir aussi l'outil open source PixelGuard).
 const TRACKING_PARAMS = [
 	"open",
 	"open_id",
@@ -53,7 +55,19 @@ const TRACKING_PARAMS = [
 	"message_id",
 	"uid",
 	"campaign",
+	"campaign_id",
 	"email",
+	"token",
+	"recipient",
+	"subscriber",
+	"signature",
+	"rid",
+	"cid",
+	"utm_source",
+	"utm_medium",
+	"utm_campaign",
+	"utm_term",
+	"utm_content",
 ];
 
 // Noms de fichiers typiques d'un pixel de suivi (sans l'extension).
