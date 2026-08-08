@@ -63,8 +63,10 @@ function render(result: AnalysisResult): void {
 		return;
 	}
 
-	const { trackingPixels, trackingLinks, remoteImageCount } = result;
-	const totalThreats = trackingPixels.length + trackingLinks.length;
+	const { trackingPixels, trackingLinks, trackingResources, remoteImageCount } =
+		result;
+	const totalThreats =
+		trackingPixels.length + trackingLinks.length + trackingResources.length;
 	status.textContent =
 		totalThreats === 0
 			? "Aucun pixel de suivi détecté."
@@ -97,6 +99,16 @@ function render(result: AnalysisResult): void {
 				"Liens de suivi des clics",
 				trackingLinks.map((link) =>
 					renderThreatItem(link.url, "", link.reasons),
+				),
+			),
+		);
+	}
+	if (trackingResources.length > 0) {
+		sections.push(
+			renderSection(
+				"Ressources distantes suspectes",
+				trackingResources.map((resource) =>
+					renderThreatItem(resource.url, "", resource.reasons),
 				),
 			),
 		);

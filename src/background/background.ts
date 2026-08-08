@@ -108,6 +108,7 @@ function emptyResult(error: string): AnalysisResult {
 		remoteImageCount: 0,
 		trackingPixels: [],
 		trackingLinks: [],
+		trackingResources: [],
 		error,
 	};
 }
@@ -119,7 +120,10 @@ function emptyResult(error: string): AnalysisResult {
  */
 async function updateBadge(context: AnalysisContext): Promise<void> {
 	const { result, mailTab } = context;
-	const count = result.trackingPixels.length + result.trackingLinks.length;
+	const count =
+		result.trackingPixels.length +
+		result.trackingLinks.length +
+		result.trackingResources.length;
 
 	// Badge de l'icône : rouge avec le nombre de pixels, sinon rien.
 	const badgeText = count > 0 ? String(count) : "";

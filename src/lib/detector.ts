@@ -20,6 +20,8 @@ export interface AnalysisResult {
 	trackingPixels: TrackingPixel[];
 	/** Liens <a href> classés comme liens de suivi des clics. */
 	trackingLinks: TrackingLink[];
+	/** Ressources distantes non-image classées comme suspectes. */
+	trackingResources: TrackingResource[];
 	/** Erreur éventuelle (ex. aucun message affiché). */
 	error?: string;
 }
@@ -28,6 +30,15 @@ export interface AnalysisResult {
 export interface TrackingLink {
 	url: string;
 	/** Pourquoi ce lien est considéré comme un lien de suivi. */
+	reasons: string[];
+}
+
+/** Ressource distante non-image suspecte (iframe, link, embed…). */
+export interface TrackingResource {
+	url: string;
+	width: number | null;
+	height: number | null;
+	/** Pourquoi cette ressource est considérée comme suspecte. */
 	reasons: string[];
 }
 
@@ -100,6 +111,21 @@ const REDIRECT_PARAMS = [
 // Mots-clés des domaines de redirection de clics (click.example.com, go.…).
 const CLICK_WORDS = ["click", "track", "trk", "redirect", "go", "mailer"];
 
+// Balises HTML qui chargent une ressource distante sans être des images.
+// Un web beacon peut être porté par n'importe quel élément qui déclenche un
+// téléchargement (iframe, feuille de style, média…).
+const RESOURCE_TAGS = [
+	"iframe",
+	"frame",
+	"link",
+	"embed",
+	"object",
+	"video",
+	"audio",
+	"source",
+	"track",
+];
+
 // Noms de fichiers typiques d'un pixel de suivi (sans l'extension).
 const PIXEL_FILE_NAMES = [
 	"pixel",
@@ -147,11 +173,15 @@ export function detectTrackingThreats(html: string): AnalysisResult {
 	const trackingLinks = extractLinks(html)
 		.map(analyzeLink)
 		.filter((link): link is TrackingLink => link !== null);
+	const trackingResources = extractRemoteResources(html)
+		.map((resource) => analyzeResource(resource, globalCssReason))
+		.filter((resource): resource is TrackingResource => resource !== null);
 
 	return {
 		remoteImageCount: images.length,
 		trackingPixels,
 		trackingLinks,
+		trackingResources,
 	};
 }
 
@@ -312,6 +342,82 @@ function analyzeLink(url: string): TrackingLink | null {
 	return { url, reasons };
 }
 
+// --- Ressources distantes non-image -------------------------------------------
+
+/** Ressource distante extraite d'une balise non-image (iframe, link…). */
+interface ExtractedResource {
+	url: string;
+	width: number | null;
+	height: number | null;
+	style: string | null;
+}
+
+/** Extrait les ressources distantes des balises non-image, dédupliquées. */
+function extractRemoteResources(html: string): ExtractedResource[] {
+	const resources: ExtractedResource[] = [];
+	const seen = new Set<string>();
+
+	for (const tagName of RESOURCE_TAGS) {
+		for (const match of html.matchAll(
+			new RegExp(`<${tagName}\\b[^>]*>`, "gi"),
+		)) {
+			const tag = match[0];
+			const url = getAttribute(tag, "src") ?? getAttribute(tag, "href") ?? "";
+			if (!isRemoteUrl(url) || seen.has(url)) continue;
+			seen.add(url);
+
+			resources.push({
+				url,
+				width: parseDimension(getAttribute(tag, "width")),
+				height: parseDimension(getAttribute(tag, "height")),
+				style: getAttribute(tag, "style"),
+			});
+		}
+	}
+	return resources;
+}
+
+/**
+ * Analyse une ressource et renvoie une ressource suspecte si elle semble
+ * l'être (invisible ou avec au moins deux indices d'URL), sinon null.
+ */
+function analyzeResource(
+	resource: ExtractedResource,
+	globalCssReason: string | null,
+): TrackingResource | null {
+	const isOneByOne = resource.width === 1 && resource.height === 1;
+	const hiddenReason = isOneByOne
+		? null
+		: (inlineCssHiddenReason(resource.style) ?? globalCssReason);
+	const fileName = suspiciousFileName(resource.url);
+	const reasons: string[] = [];
+
+	if (isOneByOne) {
+		reasons.push("Dimension 1×1 px");
+	}
+	if (hiddenReason !== null) {
+		reasons.push(hiddenReason);
+	}
+	if (fileName !== null) {
+		reasons.push(`Nom de fichier suspect (${fileName})`);
+	}
+	reasons.push(...urlTrackingReasons(resource.url));
+
+	const isSuspicious =
+		isOneByOne ||
+		hiddenReason !== null ||
+		fileName !== null ||
+		reasons.length >= 2;
+	if (!isSuspicious) return null;
+
+	return {
+		url: resource.url,
+		width: resource.width,
+		height: resource.height,
+		reasons,
+	};
+}
+
 // --- Helpers ---------------------------------------------------------------
 
 /** Lit un attribut d'une balise HTML : name="…", name='…' ou name=…. */
@@ -383,8 +489,8 @@ function findGlobalCssHiding(html: string): string | null {
 
 		for (const rule of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
 			const selector = rule[1] ?? "";
-			// La règle doit cibler les images (img, table img, …).
-			if (!/\bimg\b/i.test(selector)) continue;
+			// La règle doit cibler les images ou iframes (img, table img…).
+			if (!/\b(?:img|iframe)\b/i.test(selector)) continue;
 
 			const detail = cssHiddenReason(rule[2] ?? null);
 			if (detail !== null) {

@@ -240,6 +240,45 @@ describe("detectTrackingThreats", () => {
 
 		expect(detectTrackingThreats(html).trackingLinks).toHaveLength(0);
 	});
+
+	it("détecte un iframe de suivi (domaine + paramètres)", () => {
+		const html = `<iframe src="https://track.example.com/frame?open=1" width="300" height="150"></iframe>`;
+
+		const { trackingResources } = detectTrackingThreats(html);
+		expect(trackingResources).toHaveLength(1);
+		expect(trackingResources[0].reasons).toEqual([
+			"Domaine ou chemin lié au suivi",
+			"Paramètres de suivi (open)",
+		]);
+	});
+
+	it("détecte un iframe 1×1 (beacon non-image)", () => {
+		const html =
+			`<iframe src="https://embed.example.com/player" width="1" ` +
+			`height="1"></iframe>`;
+
+		const { trackingResources } = detectTrackingThreats(html);
+		expect(trackingResources).toHaveLength(1);
+		expect(trackingResources[0].reasons).toContain("Dimension 1×1 px");
+	});
+
+	it("détecte un embed au nom de fichier typique de pixel", () => {
+		const html = `<embed src="https://tracker.example.com/open.gif">`;
+
+		const { trackingResources } = detectTrackingThreats(html);
+		expect(trackingResources).toHaveLength(1);
+		expect(trackingResources[0].reasons).toContain(
+			"Nom de fichier suspect (open.gif)",
+		);
+	});
+
+	it("ne signale pas une feuille de style légitime", () => {
+		const html =
+			`<link href="https://cdn.example.com/styles/main.css" ` +
+			`rel="stylesheet">`;
+
+		expect(detectTrackingThreats(html).trackingResources).toHaveLength(0);
+	});
 });
 
 describe("findHtmlBody", () => {
