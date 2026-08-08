@@ -59,8 +59,9 @@ Le résultat est généré dans `dist/`.
 | `pnpm release:patch` / `release:minor` / `release:major` | Incrémente la version + génère le XPI |
 | `pnpm dev` | Serveur de développement Vite (utile pour la mise en forme du popup) |
 
-> Note : `web-ext lint` remonte 4 warnings connus, sans erreur :
-> l'absence de la permission `data_collection_permissions` et deux usages
+> Note : `web-ext lint` remonte 4 warnings connus, sans erreur : la permission
+> `messagesRead` (spécifique Thunderbird, inconnue de web-ext), l'absence de la
+> permission `data_collection_permissions` dans le manifeste, et deux usages
 > d'`innerHTML` (toujours échappés via `escapeHtml` avant insertion).
 
 ## Structure du projet
