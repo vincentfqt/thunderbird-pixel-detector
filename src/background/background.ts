@@ -1,7 +1,7 @@
 // src/background/background.ts
 import {
 	type AnalysisResult,
-	detectTrackingPixels,
+	detectTrackingThreats,
 	findHtmlBody,
 } from "../lib/detector";
 
@@ -99,7 +99,7 @@ async function analyzeMessage(
 
 	const message = await messenger.messages.getFull(header.id);
 	const html = findHtmlBody(message) ?? "";
-	return { mailTab, result: detectTrackingPixels(html) };
+	return { mailTab, result: detectTrackingThreats(html) };
 }
 
 /** Résultat vide accompagné d'un message d'erreur. */
@@ -107,6 +107,7 @@ function emptyResult(error: string): AnalysisResult {
 	return {
 		remoteImageCount: 0,
 		trackingPixels: [],
+		trackingLinks: [],
 		error,
 	};
 }
@@ -118,7 +119,7 @@ function emptyResult(error: string): AnalysisResult {
  */
 async function updateBadge(context: AnalysisContext): Promise<void> {
 	const { result, mailTab } = context;
-	const count = result.trackingPixels.length;
+	const count = result.trackingPixels.length + result.trackingLinks.length;
 
 	// Badge de l'icône : rouge avec le nombre de pixels, sinon rien.
 	const badgeText = count > 0 ? String(count) : "";
@@ -133,7 +134,7 @@ async function updateBadge(context: AnalysisContext): Promise<void> {
 	}
 
 	// Bouton d'en-tête du message : badge vert « 0 » si le message est sûr,
-	// rouge avec le nombre de pixels sinon. Le label précise l'état.
+	// rouge avec le nombre de menaces sinon. Le label précise l'état.
 	const { tabId } = mailTab;
 	await messenger.messageDisplayAction.setBadgeText({
 		tabId,
@@ -145,13 +146,13 @@ async function updateBadge(context: AnalysisContext): Promise<void> {
 	});
 	await messenger.messageDisplayAction.setLabel({
 		tabId,
-		label: count > 0 ? `${count} pixel(s)` : "Sûr",
+		label: count > 0 ? `${count} menace(s)` : "Sûr",
 	});
 	await messenger.messageDisplayAction.setTitle({
 		tabId,
 		title:
 			count > 0
-				? `${count} pixel(s) de suivi détecté(s). Cliquez pour le détail.`
+				? `${count} menace(s) de suivi détectée(s). Cliquez pour le détail.`
 				: "Aucun pixel de suivi détecté. Cliquez pour le détail.",
 	});
 }

@@ -1,14 +1,14 @@
 // src/lib/detector.test.ts
 import { describe, expect, it } from "vitest";
-import { detectTrackingPixels, findHtmlBody } from "./detector";
+import { detectTrackingThreats, findHtmlBody } from "./detector";
 
-describe("detectTrackingPixels", () => {
+describe("detectTrackingThreats", () => {
 	it("détecte un pixel de suivi classique (1×1 + nom de fichier)", () => {
 		const html =
 			`<img src="https://track.newsletter.com/open/pixel.gif?open_id=abc123" ` +
 			`width="1" height="1" alt="">`;
 
-		const { remoteImageCount, trackingPixels } = detectTrackingPixels(html);
+		const { remoteImageCount, trackingPixels } = detectTrackingThreats(html);
 
 		expect(remoteImageCount).toBe(1);
 		expect(trackingPixels).toHaveLength(1);
@@ -18,7 +18,7 @@ describe("detectTrackingPixels", () => {
 	it("détecte un pixel via une image de fond CSS", () => {
 		const html = `<div style="background-image: url('https://beacon.example.net/open.gif');"></div>`;
 
-		const { trackingPixels } = detectTrackingPixels(html);
+		const { trackingPixels } = detectTrackingThreats(html);
 		expect(trackingPixels).toHaveLength(1);
 	});
 
@@ -27,7 +27,7 @@ describe("detectTrackingPixels", () => {
 			`<img src="https://www.example.com/track?id=123&campaign=news" ` +
 			`width="1" height="1">`;
 
-		const { trackingPixels } = detectTrackingPixels(html);
+		const { trackingPixels } = detectTrackingThreats(html);
 		expect(trackingPixels).toHaveLength(1);
 	});
 
@@ -36,7 +36,7 @@ describe("detectTrackingPixels", () => {
 			`<img src="https://cdn.legitime.fr/img/logo-entreprise.png" ` +
 			`width="300" height="80" alt="Logo">`;
 
-		const { trackingPixels } = detectTrackingPixels(html);
+		const { trackingPixels } = detectTrackingThreats(html);
 		expect(trackingPixels).toHaveLength(0);
 	});
 
@@ -46,14 +46,14 @@ describe("detectTrackingPixels", () => {
 			<img src="data:image/png;base64,iVBORw0KGgo=" alt="pixel">
 		`;
 
-		const { remoteImageCount, trackingPixels } = detectTrackingPixels(html);
+		const { remoteImageCount, trackingPixels } = detectTrackingThreats(html);
 		expect(remoteImageCount).toBe(0);
 		expect(trackingPixels).toHaveLength(0);
 	});
 
 	it("ne signale rien sur un corps sans HTML", () => {
 		const html = "Bonjour, veuillez trouver ci-joint le document.";
-		expect(detectTrackingPixels(html).remoteImageCount).toBe(0);
+		expect(detectTrackingThreats(html).remoteImageCount).toBe(0);
 	});
 
 	it("analyse un email de newsletter réaliste et n'y signale que le pixel", () => {
@@ -83,7 +83,7 @@ describe("detectTrackingPixels", () => {
 			</html>
 		`;
 
-		const { remoteImageCount, trackingPixels } = detectTrackingPixels(html);
+		const { remoteImageCount, trackingPixels } = detectTrackingThreats(html);
 
 		expect(remoteImageCount).toBe(4);
 		expect(trackingPixels).toHaveLength(1);
@@ -101,7 +101,7 @@ describe("detectTrackingPixels", () => {
 	it("détecte une image masquée par CSS (display: none)", () => {
 		const html = `<img src="https://tracker.example.com/px.gif" style="display:none" alt="">`;
 
-		const { trackingPixels } = detectTrackingPixels(html);
+		const { trackingPixels } = detectTrackingThreats(html);
 		expect(trackingPixels).toHaveLength(1);
 		expect(trackingPixels[0].reasons).toContain(
 			"Masquée par CSS (display: none)",
@@ -113,7 +113,7 @@ describe("detectTrackingPixels", () => {
 			`<img src="https://tracker.example.com/px.gif" ` +
 			`style="width:1px;height:1px" alt="">`;
 
-		const { trackingPixels } = detectTrackingPixels(html);
+		const { trackingPixels } = detectTrackingThreats(html);
 		expect(trackingPixels).toHaveLength(1);
 		expect(trackingPixels[0].reasons).toContain(
 			"Masquée par CSS (Dimensions CSS minuscules)",
@@ -123,7 +123,7 @@ describe("detectTrackingPixels", () => {
 	it("détecte une image invisible via opacity: 0", () => {
 		const html = `<img src="https://tracker.example.com/px.gif" style="opacity:0" alt="">`;
 
-		const { trackingPixels } = detectTrackingPixels(html);
+		const { trackingPixels } = detectTrackingThreats(html);
 		expect(trackingPixels).toHaveLength(1);
 		expect(trackingPixels[0].reasons).toContain("Masquée par CSS (opacity: 0)");
 	});
@@ -133,14 +133,14 @@ describe("detectTrackingPixels", () => {
 			`<img src="https://cdn.legitime.fr/img/photo.jpg" ` +
 			`style="border-radius:8px;width:300px" alt="Photo">`;
 
-		const { trackingPixels } = detectTrackingPixels(html);
+		const { trackingPixels } = detectTrackingThreats(html);
 		expect(trackingPixels).toHaveLength(0);
 	});
 
 	it("extrait les images à chargement différé (data-src)", () => {
 		const html = `<img data-src="https://img.newsletter.fr/logo-mobile.png" alt="Logo">`;
 
-		const { remoteImageCount, trackingPixels } = detectTrackingPixels(html);
+		const { remoteImageCount, trackingPixels } = detectTrackingThreats(html);
 		expect(remoteImageCount).toBe(1);
 		expect(trackingPixels).toHaveLength(0);
 	});
@@ -150,7 +150,7 @@ describe("detectTrackingPixels", () => {
 			`<img src="https://cdn.newsletter.fr/img/banner.jpg" ` +
 			`srcset="https://tracker.example.com/px.gif 1x" alt="Bannière">`;
 
-		const { remoteImageCount, trackingPixels } = detectTrackingPixels(html);
+		const { remoteImageCount, trackingPixels } = detectTrackingThreats(html);
 		expect(remoteImageCount).toBe(2);
 		expect(trackingPixels).toHaveLength(1);
 		expect(trackingPixels[0].url).toBe("https://tracker.example.com/px.gif");
@@ -159,7 +159,7 @@ describe("detectTrackingPixels", () => {
 	it("détecte un pixel en URL protocole-relative (//cdn…)", () => {
 		const html = `<img src="//tracker.example.com/px.gif" width="1" height="1" alt="">`;
 
-		const { remoteImageCount, trackingPixels } = detectTrackingPixels(html);
+		const { remoteImageCount, trackingPixels } = detectTrackingThreats(html);
 		expect(remoteImageCount).toBe(1);
 		expect(trackingPixels).toHaveLength(1);
 		expect(trackingPixels[0].url).toBe("//tracker.example.com/px.gif");
@@ -170,7 +170,7 @@ describe("detectTrackingPixels", () => {
 			`<img src="//cdn.legitime.fr/img/logo.png" width="300" height="80" ` +
 			`alt="Logo">`;
 
-		expect(detectTrackingPixels(html).trackingPixels).toHaveLength(0);
+		expect(detectTrackingThreats(html).trackingPixels).toHaveLength(0);
 	});
 
 	it("détecte une image masquée par un style global (<style>img{display:none})", () => {
@@ -178,7 +178,7 @@ describe("detectTrackingPixels", () => {
 			`<style>img { display: none }</style>` +
 			`<img src="https://example.com/photo.png" alt="Photo">`;
 
-		const { trackingPixels } = detectTrackingPixels(html);
+		const { trackingPixels } = detectTrackingThreats(html);
 		expect(trackingPixels).toHaveLength(1);
 		expect(trackingPixels[0].reasons).toContain(
 			"Masquée par CSS global (display: none)",
@@ -191,7 +191,7 @@ describe("detectTrackingPixels", () => {
 			`<img src="https://cdn.legitime.fr/img/logo.png" width="300" ` +
 			`height="80" alt="Logo">`;
 
-		expect(detectTrackingPixels(html).trackingPixels).toHaveLength(0);
+		expect(detectTrackingThreats(html).trackingPixels).toHaveLength(0);
 	});
 
 	it("ne signale pas une image quand le style global ne la masque pas", () => {
@@ -200,7 +200,45 @@ describe("detectTrackingPixels", () => {
 			`<img src="https://cdn.legitime.fr/img/logo.png" width="300" ` +
 			`height="80" alt="Logo">`;
 
-		expect(detectTrackingPixels(html).trackingPixels).toHaveLength(0);
+		expect(detectTrackingThreats(html).trackingPixels).toHaveLength(0);
+	});
+
+	it("détecte un lien de suivi des clics (domaine de redirection + paramètre url)", () => {
+		const html =
+			`<a href="https://click.example.com/?url=https%3A%2F%2Fshop.com%2Fitem">` +
+			`Voir l'offre</a>`;
+
+		const { trackingLinks } = detectTrackingThreats(html);
+		expect(trackingLinks).toHaveLength(1);
+		expect(trackingLinks[0].url).toBe(
+			"https://click.example.com/?url=https%3A%2F%2Fshop.com%2Fitem",
+		);
+		expect(trackingLinks[0].reasons).toEqual([
+			"Domaine de redirection",
+			"Paramètre de redirection (url)",
+		]);
+	});
+
+	it("détecte un lien au chemin de redirection (/track/click/…)", () => {
+		const html = `<a href="https://mailer.example.com/track/click?p=abc123">Offre</a>`;
+
+		const { trackingLinks } = detectTrackingThreats(html);
+		expect(trackingLinks).toHaveLength(1);
+		expect(trackingLinks[0].reasons).toContain("Chemin de redirection");
+	});
+
+	it("ne signale pas un lien légitime avec un simple paramètre utm", () => {
+		const html = `<a href="https://www.example.com/shop?utm_source=newsletter">Boutique</a>`;
+
+		expect(detectTrackingThreats(html).trackingLinks).toHaveLength(0);
+	});
+
+	it("ne signale pas un lien de contenu mentionnant le mot « tracking »", () => {
+		const html =
+			`<a href="https://en.wikipedia.org/wiki/Tracking_pixel?utm_source=email">` +
+			`Wikipédia</a>`;
+
+		expect(detectTrackingThreats(html).trackingLinks).toHaveLength(0);
 	});
 });
 

@@ -48,6 +48,16 @@ button:hover {
 	color: #166534;
 }
 
+.threats h3 {
+	margin: 0.75rem 0 0.25rem;
+	font-size: 0.85rem;
+	color: #1f2937;
+}
+
+.threats h3:first-child {
+	margin-top: 0;
+}
+
 .pixel {
 	margin-bottom: 0.5rem;
 	padding: 0.625rem 0.75rem;

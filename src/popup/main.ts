@@ -1,7 +1,7 @@
 // src/popup/main.ts
 import "./style.css";
 
-import type { AnalysisResult, TrackingPixel } from "../lib/detector";
+import type { AnalysisResult } from "../lib/detector";
 
 const app = document.querySelector<HTMLElement>("#app");
 
@@ -63,36 +63,62 @@ function render(result: AnalysisResult): void {
 		return;
 	}
 
-	const { trackingPixels, remoteImageCount } = result;
+	const { trackingPixels, trackingLinks, remoteImageCount } = result;
+	const totalThreats = trackingPixels.length + trackingLinks.length;
 	status.textContent =
-		trackingPixels.length === 0
+		totalThreats === 0
 			? "Aucun pixel de suivi détecté."
-			: `${trackingPixels.length} pixel(s) de suivi détecté(s) sur ${remoteImageCount} image(s) distante(s).`;
+			: `${totalThreats} menace(s) de suivi détectée(s) sur ${remoteImageCount} image(s) distante(s).`;
 
 	results.hidden = false;
-	results.innerHTML =
-		trackingPixels.length === 0
-			? `<p class="ok">Ce message semble exempt de pixel de suivi.</p>`
-			: trackingPixels.map(renderPixel).join("");
+	if (totalThreats === 0) {
+		results.innerHTML = `<p class="ok">Ce message semble exempt de pixel de suivi.</p>`;
+		return;
+	}
+
+	const sections: string[] = [];
+	if (trackingPixels.length > 0) {
+		sections.push(
+			renderSection(
+				"Pixels de suivi",
+				trackingPixels.map((pixel) =>
+					renderThreatItem(
+						pixel.url,
+						`Dimensions : ${pixel.width ?? "?"}×${pixel.height ?? "?"} px`,
+						pixel.reasons,
+					),
+				),
+			),
+		);
+	}
+	if (trackingLinks.length > 0) {
+		sections.push(
+			renderSection(
+				"Liens de suivi des clics",
+				trackingLinks.map((link) =>
+					renderThreatItem(link.url, "", link.reasons),
+				),
+			),
+		);
+	}
+	results.innerHTML = sections.join("");
 }
 
-function renderPixel(pixel: TrackingPixel): string {
-	const dimensions =
-		pixel.width === null && pixel.height === null
-			? ""
-			: `<p class="meta">Dimensions : ${pixel.width ?? "?"}×${pixel.height ?? "?"} px</p>`;
+function renderSection(title: string, items: string[]): string {
+	return `<section class="threats"><h3>${escapeHtml(title)}</h3>${items.join("")}</section>`;
+}
 
-	const reasons = pixel.reasons
+function renderThreatItem(
+	url: string,
+	meta: string,
+	reasons: string[],
+): string {
+	const metaHtml = meta === "" ? "" : `<p class="meta">${escapeHtml(meta)}</p>`;
+	const reasonsHtml = reasons
 		.map((reason) => `<li>${escapeHtml(reason)}</li>`)
 		.join("");
 
-	return `
-		<article class="pixel">
-			<h2>${escapeHtml(pixel.url)}</h2>
-			${dimensions}
-			<ul>${reasons}</ul>
-		</article>
-	`;
+	return `<article class="pixel"><h2>${escapeHtml(url)}</h2>${metaHtml}<ul>${reasonsHtml}</ul></article>`;
 }
 
 /** Échappe le HTML : les URLs viennent d'emails potentiellement hostiles. */

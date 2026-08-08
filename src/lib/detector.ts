@@ -18,8 +18,17 @@ export interface AnalysisResult {
 	remoteImageCount: number;
 	/** Images classées comme pixels de suivi. */
 	trackingPixels: TrackingPixel[];
+	/** Liens <a href> classés comme liens de suivi des clics. */
+	trackingLinks: TrackingLink[];
 	/** Erreur éventuelle (ex. aucun message affiché). */
 	error?: string;
+}
+
+/** Lien de suivi des clics détecté dans un <a href>. */
+export interface TrackingLink {
+	url: string;
+	/** Pourquoi ce lien est considéré comme un lien de suivi. */
+	reasons: string[];
 }
 
 // Mot-clés présents dans les domaines, chemins ou noms de fichiers utilisés
@@ -70,6 +79,27 @@ const TRACKING_PARAMS = [
 	"utm_content",
 ];
 
+// Paramètres d'URL d'une redirection : le clic passe par un serveur de suivi
+// qui redirige ensuite vers la vraie destination (click-tracker).
+const REDIRECT_PARAMS = [
+	"url",
+	"redirect",
+	"redirect_url",
+	"redirect_to",
+	"dest",
+	"destination",
+	"target",
+	"goto",
+	"next",
+	"continue",
+	"return",
+	"ref",
+	"link",
+];
+
+// Mots-clés des domaines de redirection de clics (click.example.com, go.…).
+const CLICK_WORDS = ["click", "track", "trk", "redirect", "go", "mailer"];
+
 // Noms de fichiers typiques d'un pixel de suivi (sans l'extension).
 const PIXEL_FILE_NAMES = [
 	"pixel",
@@ -100,7 +130,13 @@ interface ExtractedImage {
  * Détecte les pixels de suivi dans le HTML d'un message.
  * Renvoie les pixels détectés et le nombre total d'images distantes.
  */
-export function detectTrackingPixels(html: string): AnalysisResult {
+/**
+ * Analyse le HTML d'un message : pixels de suivi (<img>), liens de suivi des
+ * clics (<a href>) et ressources distantes suspectes. Renvoie les menaces
+ * détectées et le nombre total d'images distantes. Aucun contenu distant n'est
+ * chargé : on travaille uniquement sur le source.
+ */
+export function detectTrackingThreats(html: string): AnalysisResult {
 	const images = extractRemoteImages(html);
 	// Un style global (ex. img { display:none }) masque toutes les images :
 	// on le passe à chaque image analysée.
@@ -108,10 +144,14 @@ export function detectTrackingPixels(html: string): AnalysisResult {
 	const trackingPixels = images
 		.map((image) => analyzeImage(image, globalCssReason))
 		.filter((pixel): pixel is TrackingPixel => pixel !== null);
+	const trackingLinks = extractLinks(html)
+		.map(analyzeLink)
+		.filter((link): link is TrackingLink => link !== null);
 
 	return {
 		remoteImageCount: images.length,
 		trackingPixels,
+		trackingLinks,
 	};
 }
 
@@ -209,13 +249,7 @@ function analyzeImage(
 	if (fileName !== null) {
 		reasons.push(`Nom de fichier suspect (${fileName})`);
 	}
-	if (urlContainsWord(image.url, TRACKING_WORDS)) {
-		reasons.push("Domaine ou chemin lié au suivi");
-	}
-	const trackingParams = findTrackingParams(image.url);
-	if (trackingParams.length > 0) {
-		reasons.push(`Paramètres de suivi (${trackingParams.join(", ")})`);
-	}
+	reasons.push(...urlTrackingReasons(image.url));
 
 	// Un pixel est signalé s'il est invisible (1×1 ou masqué par CSS), s'il
 	// porte un nom de fichier typique, ou si au moins deux indices sont réunis.
@@ -232,6 +266,50 @@ function analyzeImage(
 		height: image.height,
 		reasons,
 	};
+}
+
+// --- Liens de suivi -----------------------------------------------------------
+
+/** URLs des liens <a href> du message, dédupliquées. */
+function extractLinks(html: string): string[] {
+	const links = new Set<string>();
+	for (const match of html.matchAll(/<a\b[^>]*>/gi)) {
+		const href = getAttribute(match[0], "href");
+		if (href !== null && isRemoteUrl(href)) {
+			links.add(href);
+		}
+	}
+	return [...links];
+}
+
+/**
+ * Analyse un lien et renvoie un lien de suivi si au moins deux indices sont
+ * réunis (ex. domaine de redirection + paramètre url=…). Un seul indice ne
+ * suffit pas : utm_source seul est un usage marketing courant, pas une fuite.
+ */
+function analyzeLink(url: string): TrackingLink | null {
+	const reasons: string[] = [];
+	const path = parseUrl(url)?.pathname ?? "";
+
+	// Chemin explicite de redirection : /click/…, /track/… (Mailchimp, SendGrid…).
+	if (/(?:^|\/)(?:click|track|trk|redirect)\//i.test(path)) {
+		reasons.push("Chemin de redirection");
+	}
+	if (hostContainsWord(url, CLICK_WORDS)) {
+		reasons.push("Domaine de redirection");
+	}
+	const redirectParams = findUrlParams(url, REDIRECT_PARAMS);
+	if (redirectParams.length > 0) {
+		reasons.push(`Paramètre de redirection (${redirectParams.join(", ")})`);
+	}
+	// Paramètres de suivi partagés avec l'analyse des images.
+	const trackingParams = findTrackingParams(url);
+	if (trackingParams.length > 0) {
+		reasons.push(`Paramètres de suivi (${trackingParams.join(", ")})`);
+	}
+
+	if (reasons.length < 2) return null;
+	return { url, reasons };
 }
 
 // --- Helpers ---------------------------------------------------------------
@@ -394,6 +472,15 @@ function suspiciousFileName(url: string): string | null {
 	return null;
 }
 
+/** true si le domaine de l'URL contient un mot-clé (click.example.com…). */
+function hostContainsWord(url: string, words: string[]): boolean {
+	const parsed = parseUrl(url);
+	return (
+		parsed !== null &&
+		words.some((word) => parsed.hostname.toLowerCase().includes(word))
+	);
+}
+
 /** true si le domaine ou le chemin de l'URL contient un mot-clé de suivi. */
 function urlContainsWord(url: string, words: string[]): boolean {
 	const parsed = parseUrl(url);
@@ -403,14 +490,35 @@ function urlContainsWord(url: string, words: string[]): boolean {
 	return words.some((word) => hostAndPath.toLowerCase().includes(word));
 }
 
-/** Paramètres de l'URL reconnus comme liés au suivi. */
-function findTrackingParams(url: string): string[] {
+/**
+ * Indices de suivi présents dans une URL : mot-clé du domaine/chemin et
+ * paramètres de suivi. Partagé par les images et les liens.
+ */
+function urlTrackingReasons(url: string): string[] {
+	const reasons: string[] = [];
+	if (urlContainsWord(url, TRACKING_WORDS)) {
+		reasons.push("Domaine ou chemin lié au suivi");
+	}
+	const trackingParams = findTrackingParams(url);
+	if (trackingParams.length > 0) {
+		reasons.push(`Paramètres de suivi (${trackingParams.join(", ")})`);
+	}
+	return reasons;
+}
+
+/** Paramètres de l'URL dont le nom est dans la liste fournie. */
+function findUrlParams(url: string, names: string[]): string[] {
 	const parsed = parseUrl(url);
 	if (parsed === null) return [];
 
 	return [...parsed.searchParams.keys()].filter((name) =>
-		TRACKING_PARAMS.includes(name.toLowerCase()),
+		names.includes(name.toLowerCase()),
 	);
+}
+
+/** Paramètres de l'URL reconnus comme liés au suivi. */
+function findTrackingParams(url: string): string[] {
+	return findUrlParams(url, TRACKING_PARAMS);
 }
 
 /**
