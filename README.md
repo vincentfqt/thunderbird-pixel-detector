@@ -94,13 +94,13 @@ vestiges du template Vite (non référencés par le code de l'extension).
 ## Architecture
 
 ```mermaid
-flowchart LR
-    A[Message affiché dans Thunderbird] --> B[background.ts<br/>onMessagesDisplayed]
-    B --> C[messages.getFull]
-    C --> D[findHtmlBody]
-    D --> E[detectTrackingThreats]
-    E --> F[Badge + label du bouton d'en-tête]
-    F --> G[Popup détaillé à la demande]
+flowchart TD
+    A["Message affiché dans Thunderbird"] --> B["background.ts (onMessagesDisplayed)"]
+    B --> C["messages.getFull"]
+    C --> D["findHtmlBody"]
+    D --> E["detectTrackingThreats"]
+    E --> F["Badge + label du bouton d'en-tête"]
+    F --> G["Popup détaillé à la demande"]
 ```
 
 Le moteur `detectTrackingThreats` est **pur** : il ne touche qu'à des chaînes
