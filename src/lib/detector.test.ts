@@ -153,6 +153,23 @@ describe("detectTrackingPixels", () => {
 		expect(trackingPixels).toHaveLength(1);
 		expect(trackingPixels[0].url).toBe("https://tracker.example.com/px.gif");
 	});
+
+	it("détecte un pixel en URL protocole-relative (//cdn…)", () => {
+		const html = `<img src="//tracker.example.com/px.gif" width="1" height="1" alt="">`;
+
+		const { remoteImageCount, trackingPixels } = detectTrackingPixels(html);
+		expect(remoteImageCount).toBe(1);
+		expect(trackingPixels).toHaveLength(1);
+		expect(trackingPixels[0].url).toBe("//tracker.example.com/px.gif");
+	});
+
+	it("ne signale pas une image légitime en URL protocole-relative", () => {
+		const html =
+			`<img src="//cdn.legitime.fr/img/logo.png" width="300" height="80" ` +
+			`alt="Logo">`;
+
+		expect(detectTrackingPixels(html).trackingPixels).toHaveLength(0);
+	});
 });
 
 describe("findHtmlBody", () => {

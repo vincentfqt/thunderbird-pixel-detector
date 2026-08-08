@@ -303,9 +303,13 @@ function parseDimension(value: string | null): number | null {
 	return match === undefined || match === null ? null : Number(match[0]);
 }
 
-/** true si l'URL pointe vers un serveur distant (http ou https). */
+/**
+ * true si l'URL pointe vers un serveur distant : http(s):// ou protocole
+ * relatif (//cdn.example.com/…). Les URLs protocole-relatives sont fréquentes
+ * dans les newsletters, sans indication de schéma.
+ */
 function isRemoteUrl(url: string): boolean {
-	return /^https?:\/\//i.test(url);
+	return /^(?:https?:)?\/\//i.test(url);
 }
 
 /** Nom de fichier de l'URL s'il est typique d'un pixel de suivi, sinon null. */
@@ -339,10 +343,14 @@ function findTrackingParams(url: string): string[] {
 	);
 }
 
-/** Parse une URL sans lever d'exception. */
+/**
+ * Parse une URL sans lever d'exception. Les URLs protocole-relatives
+ * (//example.com/…) sont parsées comme https : new URL les refuse sans base,
+ * mais elles désignent bien un serveur distant.
+ */
 function parseUrl(url: string): URL | null {
 	try {
-		return new URL(url);
+		return new URL(url.startsWith("//") ? `https:${url}` : url);
 	} catch {
 		return null;
 	}
