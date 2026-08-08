@@ -22,34 +22,40 @@ interface ThunderbirdMessagePart {
 	partName?: string;
 }
 
-/** Onglet de messagerie renvoyé par mailTabs.getCurrent. */
-interface ThunderbirdMailTab {
+/** Liste de messages renvoyée par messageDisplay.getDisplayedMessages. */
+interface ThunderbirdMessageList {
 	id: number;
+	messages: ThunderbirdMessageHeader[];
+}
+
+/** Onglet de messagerie renvoyé par mailTabs.query. */
+interface ThunderbirdMailTab {
+	tabId: number;
 	windowId: number;
 	active: boolean;
-	showing: boolean;
 }
 
 /** API Thunderbird absentes de @types/firefox-webext-browser. */
 interface ThunderbirdApi {
 	mailTabs: {
-		getCurrent(): Promise<ThunderbirdMailTab>;
+		query(queryInfo?: {
+			active?: boolean;
+			currentWindow?: boolean;
+		}): Promise<ThunderbirdMailTab[]>;
 	};
 	messageDisplay: {
-		getDisplayedMessage(
-			tabId: number,
-		): Promise<ThunderbirdMessageHeader | null>;
-		onMessageDisplayed: {
+		getDisplayedMessages(tabId?: number): Promise<ThunderbirdMessageList>;
+		onMessagesDisplayed: {
 			addListener(
 				listener: (
 					tab: ThunderbirdMailTab,
-					message: ThunderbirdMessageHeader,
+					displayedMessages: ThunderbirdMessageList,
 				) => void,
 			): void;
 			removeListener(
 				listener: (
 					tab: ThunderbirdMailTab,
-					message: ThunderbirdMessageHeader,
+					displayedMessages: ThunderbirdMessageList,
 				) => void,
 			): void;
 		};

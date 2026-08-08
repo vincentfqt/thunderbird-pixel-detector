@@ -28,7 +28,7 @@ messenger.runtime.onMessage.addListener((message: PopupMessage) => {
 // le badge de l'icône sans action de l'utilisateur.
 let autoAnalyzeTimer: ReturnType<typeof setTimeout> | undefined;
 
-messenger.messageDisplay.onMessageDisplayed.addListener(() => {
+messenger.messageDisplay.onMessagesDisplayed.addListener(() => {
 	if (autoAnalyzeTimer !== undefined) {
 		clearTimeout(autoAnalyzeTimer);
 	}
@@ -49,20 +49,37 @@ async function analyzeAndUpdateBadge(): Promise<AnalysisResult> {
 
 /** Récupère le message affiché et détecte ses pixels de suivi. */
 async function analyzeDisplayedMessage(): Promise<AnalysisResult> {
-	const tab = await messenger.mailTabs.getCurrent();
-	const header = await messenger.messageDisplay.getDisplayedMessage(tab.id);
+	// Le message affiché vit dans l'onglet de messagerie courant (3-panes).
+	const [mailTab] = await messenger.mailTabs.query({
+		active: true,
+		currentWindow: true,
+	});
 
-	if (header === null) {
-		return {
-			remoteImageCount: 0,
-			trackingPixels: [],
-			error: "Aucun message affiché.",
-		};
+	if (mailTab === undefined) {
+		return emptyResult("Aucun onglet de messagerie ouvert.");
+	}
+
+	const { messages } = await messenger.messageDisplay.getDisplayedMessages(
+		mailTab.tabId,
+	);
+	const header = messages[0];
+
+	if (header === undefined) {
+		return emptyResult("Aucun message affiché.");
 	}
 
 	const message = await messenger.messages.getFull(header.id);
 	const html = findHtmlBody(message) ?? "";
 	return detectTrackingPixels(html);
+}
+
+/** Résultat vide accompagné d'un message d'erreur. */
+function emptyResult(error: string): AnalysisResult {
+	return {
+		remoteImageCount: 0,
+		trackingPixels: [],
+		error,
+	};
 }
 
 /** Affiche le nombre de pixels détectés sur l'icône de l'extension. */
