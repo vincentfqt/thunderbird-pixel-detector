@@ -56,7 +56,7 @@ Le résultat est généré dans `dist/`.
 | `pnpm build` | Compile TypeScript (`tsc --noEmit`) + build Vite vers `dist/` |
 | `pnpm tb:lint` | `build` + lint `web-ext` de `dist/` (0 erreur attendu) |
 | `pnpm tb:build` | Génère un XPI signable dans `artifacts/` |
-| `pnpm release:patch` / `release:minor` / `release:major` | Incrémente la version + génère le XPI |
+| `pnpm release:patch` / `release:minor` / `release:major` | Incrémente la version, valide le projet, génère le XPI, crée le commit et le tag Git |
 | `pnpm dev` | Serveur de développement Vite (utile pour la mise en forme du popup) |
 
 > Note : `web-ext lint` remonte 4 warnings connus, sans erreur : la permission
@@ -64,12 +64,34 @@ Le résultat est généré dans `dist/`.
 > permission `data_collection_permissions` dans le manifeste, et deux usages
 > d'`innerHTML` (toujours échappés via `escapeHtml` avant insertion).
 
+### Versionnement et releases
+
+La version de l'extension est conservée dans `package.json` et
+`public/manifest.json`. Chaque `pnpm build` vérifie que les deux valeurs sont
+identiques avant de lancer la compilation.
+
+Les commandes de release utilisent SemVer :
+
+```sh
+pnpm release:patch
+pnpm release:minor
+pnpm release:major
+```
+
+Une release exige un arbre Git propre. Elle met à jour les deux versions,
+exécute les tests, Biome, `web-ext lint` et la génération du XPI, puis crée un
+commit `chore: release vX.Y.Z` et un tag Git annoté `vX.Y.Z`. En cas d'échec
+avant le commit, les fichiers de version sont restaurés.
+
 ## Structure du projet
 
 ```
 public/
   manifest.json          Manifeste de l'extension (MV3, permission messagesRead)
   icons/                 Icônes 16/32/48/64 px
+scripts/
+  check-version.mjs      Vérifie la synchronisation des versions avant le build
+  release.mjs            Prépare, valide et tague une release
 src/
   background/
     background.ts        Orchestration : scan à l'affichage, badge, réponses au popup
