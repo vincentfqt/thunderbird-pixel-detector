@@ -32,26 +32,36 @@ messenger.runtime.onMessage.addListener((message: PopupMessage) => {
 	}
 
 	// La Promise renvoyée sert de réponse au popup (runtime.sendMessage).
-	return analyzeCurrentMessage().then(analyzeAndUpdateBadge);
+	return analyzeCurrentMessage();
 });
 
 // Analyse automatique à chaque affichage d'un message, pour mettre à jour
 // les indicateurs sans action de l'utilisateur.
-let autoAnalyzeTimer: ReturnType<typeof setTimeout> | undefined;
+const timers = new Map<number, ReturnType<typeof setTimeout>>();
+const generations = new Map<number, number>();
+const badgeUpdates = new Map<number, Promise<void>>();
+
+function nextGeneration(tabId: number): number {
+	const generation = (generations.get(tabId) ?? 0) + 1;
+	generations.set(tabId, generation);
+	return generation;
+}
 
 messenger.messageDisplay.onMessagesDisplayed.addListener(
 	(tab, displayedMessages) => {
-		if (autoAnalyzeTimer !== undefined) {
-			clearTimeout(autoAnalyzeTimer);
-		}
-
-		autoAnalyzeTimer = setTimeout(() => {
-			void analyzeMessage(tab, displayedMessages.messages[0])
-				.then(analyzeAndUpdateBadge)
-				.catch((error) => {
-					console.error("Échec de l'analyse automatique", error);
-				});
-		}, 300);
+		const generation = nextGeneration(tab.tabId);
+		clearTimeout(timers.get(tab.tabId));
+		timers.set(
+			tab.tabId,
+			setTimeout(() => {
+				timers.delete(tab.tabId);
+				void analyzeMessage(tab, displayedMessages.messages)
+					.then((context) => analyzeAndUpdateBadge(context, generation))
+					.catch((error) => {
+						console.error("Échec de l'analyse automatique", error);
+					});
+			}, 300),
+		);
 	},
 );
 
@@ -61,29 +71,58 @@ messenger.messageDisplay.onMessagesDisplayed.addListener(
  */
 async function analyzeAndUpdateBadge(
 	context: AnalysisContext,
+	generation: number,
 ): Promise<AnalysisResult> {
-	await updateBadge(context);
-	return context.result;
+	const tabId = context.mailTab?.tabId;
+	if (tabId === undefined) return context.result;
+	const previous = badgeUpdates.get(tabId) ?? Promise.resolve();
+	const update = previous
+		.catch(() => {})
+		.then(async () => {
+			if (generations.get(tabId) === generation) await updateBadge(context);
+		});
+	badgeUpdates.set(tabId, update);
+	try {
+		await update;
+	} finally {
+		if (badgeUpdates.get(tabId) === update) badgeUpdates.delete(tabId);
+	}
+	return generations.get(tabId) === generation
+		? context.result
+		: emptyResult("Le message affiché a changé. Veuillez réanalyser.");
 }
 
 /**
  * Récupère le message affiché dans l'onglet de messagerie courant.
  * Utilisé par le popup, qui n'a pas accès à l'événement onMessagesDisplayed.
  */
-async function analyzeCurrentMessage(): Promise<AnalysisContext> {
+async function analyzeCurrentMessage(): Promise<AnalysisResult> {
 	const [mailTab] = await messenger.mailTabs.query({
 		active: true,
 		currentWindow: true,
 	});
 
 	if (mailTab === undefined) {
-		return { result: emptyResult("Aucun onglet de messagerie ouvert.") };
+		return emptyResult("Aucun onglet de messagerie ouvert.");
 	}
 
-	const { messages } = await messenger.messageDisplay.getDisplayedMessages(
-		mailTab.tabId,
-	);
-	return analyzeMessage(mailTab, messages[0]);
+	const generation = nextGeneration(mailTab.tabId);
+	clearTimeout(timers.get(mailTab.tabId));
+	timers.delete(mailTab.tabId);
+	let context: AnalysisContext;
+	try {
+		const { messages } = await messenger.messageDisplay.getDisplayedMessages(
+			mailTab.tabId,
+		);
+		context = await analyzeMessage(mailTab, messages);
+	} catch (error) {
+		console.error("Échec de l'analyse", error);
+		context = {
+			mailTab,
+			result: emptyResult("Erreur pendant l'analyse du message."),
+		};
+	}
+	return analyzeAndUpdateBadge(context, generation);
 }
 
 /**
@@ -92,13 +131,23 @@ async function analyzeCurrentMessage(): Promise<AnalysisContext> {
  */
 async function analyzeMessage(
 	mailTab: ThunderbirdMailTab,
-	header: ThunderbirdMessageHeader | undefined,
+	headers: ThunderbirdMessageHeader[],
 ): Promise<AnalysisContext> {
+	const header = headers[0];
 	if (header === undefined) {
 		return { mailTab, result: emptyResult("Aucun message affiché.") };
 	}
 
-	const message = await messenger.messages.getFull(header.id);
+	let message: ThunderbirdMessagePart;
+	try {
+		message = await messenger.messages.getFull(header.id);
+	} catch (error) {
+		console.error("Échec de la lecture du message", error);
+		return {
+			mailTab,
+			result: emptyResult("Erreur pendant l'analyse du message."),
+		};
+	}
 	const html = findHtmlBody(message) ?? "";
 	return {
 		mailTab,
@@ -106,6 +155,7 @@ async function analyzeMessage(
 			...detectTrackingThreats(html),
 			// Les en-têtes MIME (accusés de réception) ne sont pas dans le HTML.
 			readReceiptRequested: readReceiptRequested(message),
+			multipleMessages: headers.length > 1,
 		},
 	};
 }
@@ -138,13 +188,34 @@ async function updateBadge(context: AnalysisContext): Promise<void> {
 
 	// Badge de l'icône : rouge avec le nombre de menaces, sinon rien.
 	const badgeText = count > 0 ? String(count) : "";
-	await messenger.action.setBadgeText({ text: badgeText });
+	await messenger.action.setBadgeText({
+		tabId: mailTab?.tabId,
+		text: badgeText,
+	});
 	if (count > 0) {
-		await messenger.action.setBadgeBackgroundColor({ color: "#d32f2f" });
+		await messenger.action.setBadgeBackgroundColor({
+			tabId: mailTab?.tabId,
+			color: "#d32f2f",
+		});
 	}
 
 	// Sans onglet ou sans analyse, il n'y a rien à indiquer sur l'en-tête.
-	if (mailTab === undefined || result.error !== undefined) {
+	if (mailTab === undefined) {
+		return;
+	}
+	if (result.error !== undefined) {
+		await messenger.messageDisplayAction.setBadgeText({
+			tabId: mailTab.tabId,
+			text: "",
+		});
+		await messenger.messageDisplayAction.setLabel({
+			tabId: mailTab.tabId,
+			label: "Analyse indisponible",
+		});
+		await messenger.messageDisplayAction.setTitle({
+			tabId: mailTab.tabId,
+			title: result.error,
+		});
 		return;
 	}
 
@@ -166,7 +237,7 @@ async function updateBadge(context: AnalysisContext): Promise<void> {
 				? `${count} menace(s)`
 				: result.readReceiptRequested
 					? "Accusé de réception"
-					: "Sûr",
+					: "Aucun suivi détecté",
 	});
 	await messenger.messageDisplayAction.setTitle({
 		tabId,

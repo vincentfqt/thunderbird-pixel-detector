@@ -23,6 +23,8 @@ export interface AnalysisResult {
 	trackingResources: TrackingResource[];
 	/** true si le message demande un accusé de réception (Return-Receipt-To…). */
 	readReceiptRequested?: boolean;
+	/** Plusieurs messages sont affichés ; seul le premier est analysé. */
+	multipleMessages?: boolean;
 	/** Erreur éventuelle (ex. aucun message affiché). */
 	error?: string;
 }

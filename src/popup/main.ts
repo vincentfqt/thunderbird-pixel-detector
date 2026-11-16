@@ -36,6 +36,7 @@ async function runAnalysis(): Promise<void> {
 	if (!status || !results) return;
 
 	status.textContent = "Analyse en cours…";
+	results.hidden = true;
 
 	try {
 		const response = (await messenger.runtime.sendMessage({
@@ -74,6 +75,9 @@ function render(result: AnalysisResult): void {
 
 	// Un accusé de réception n'est pas un pixel, mais il confirme l'ouverture
 	// du message à l'expéditeur : c'est une forme de suivi à signaler.
+	const selectionWarning = result.multipleMessages
+		? `<p class="warn">Plusieurs messages sont affichés : seul le premier est analysé.</p>`
+		: "";
 	const receiptWarning =
 		result.readReceiptRequested === true
 			? `<p class="warn">⚠️ Ce message demande un accusé de réception : l'ouverture peut être confirmée à l'expéditeur (Return-Receipt-To / Disposition-Notification-To).</p>`
@@ -82,6 +86,7 @@ function render(result: AnalysisResult): void {
 	results.hidden = false;
 	if (totalThreats === 0) {
 		results.innerHTML =
+			selectionWarning +
 			receiptWarning +
 			`<p class="ok">Ce message semble exempt de pixel de suivi.</p>`;
 		return;
@@ -122,7 +127,7 @@ function render(result: AnalysisResult): void {
 			),
 		);
 	}
-	results.innerHTML = receiptWarning + sections.join("");
+	results.innerHTML = selectionWarning + receiptWarning + sections.join("");
 }
 
 function renderSection(title: string, items: string[]): string {
