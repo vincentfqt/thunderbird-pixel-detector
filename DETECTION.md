@@ -240,7 +240,7 @@ raisons pour que l'utilisateur juge.
 ## 10. Intégration Thunderbird (`src/background/background.ts`)
 
 1. **Scan automatique** : `messenger.messageDisplay.onMessagesDisplayed` se
-   déclenche à chaque affichage de message ; un debounce de **300 ms** évite de
+   déclenche à chaque affichage de message ; un debounce par onglet de **300 ms** évite de
    relancer l'analyse pendant la navigation entre messages.
 2. **Récupération du corps** : `messenger.messages.getFull(header.id)` puis
    `findHtmlBody(part)` qui descend récursivement dans les parties
@@ -250,7 +250,7 @@ raisons pour que l'utilisateur juge.
    - icône de la barre d'outils : badge rouge avec le nombre de menaces
      (`pixels + liens + ressources`), rien si 0 ;
    - bouton d'en-tête du message (`messageDisplayAction`) : badge toujours
-     visible — vert `0` si sûr, rouge avec le compte sinon ; label `Sûr` /
+     visible — vert `0` si aucune menace détectée, rouge avec le compte sinon ; label `Aucun suivi détecté` /
      `Accusé de réception` / `N menace(s)` ; titre explicatif au survol.
    - un accusé de réception compte comme une alerte (`needsAttention`) même sans
      pixel : c'est une confirmation d'ouverture.
@@ -263,7 +263,7 @@ raisons pour que l'utilisateur juge.
 
 ## 11. Les tests (`src/lib/detector.test.ts`)
 
-35 tests Vitest, répartis en trois groupes :
+37 tests Vitest du moteur, répartis en trois groupes :
 
 - **`detectTrackingThreats`** (~26 tests) : un test **positif** et, quand c'est
   pertinent, un test **négatif** (pas de faux positif) pour chaque technique —
@@ -290,8 +290,8 @@ que personne ne promette plus que ce que le code fait :
 - **Pas de ML / pas d'analyse du rendu** : on travaille uniquement sur le source,
   ce qui est un choix de confidentialité (aucun chargement) mais empêche de
   détecter un tracker sans aucun indice textuel.
-- **Pas de décodage d'entités HTML** dans les URLs extraites : une URL encodée
-  (`&amp;`) n'est pas normalisée avant analyse.
+- **Décodage partiel des entités HTML** : `&amp;`, `&#38;` et `&#x26;` sont
+  normalisées ; les autres entités ne sont pas décodées.
 - **Pas de trim des espaces internes** d'une URL : `extractSrcsetUrls` découpe
   sur les virgules et les espaces, mais une URL contenant des espaces ne sera
   pas analysée (elle échoue à `parseUrl` et retombe sur les autres indices).

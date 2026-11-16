@@ -21,7 +21,7 @@ et alerte l'utilisateur, **sans jamais charger les contenus distants**.
 - **Accusés de réception** : en-têtes `Return-Receipt-To` et
   `Disposition-Notification-To` (une confirmation d'ouverture sans pixel).
 - **Indicateurs visuels** : badge sur le bouton d'en-tête du message (vert « 0 »
-  si sûr, rouge avec le nombre de menaces sinon) et popup détaillant chaque
+  si aucun suivi détecté, rouge avec le nombre de menaces sinon) et popup détaillant chaque
   signalement avec sa **raison**.
 
 ## Prérequis
@@ -51,7 +51,7 @@ Le résultat est généré dans `dist/`.
 
 | Commande | Rôle |
 | --- | --- |
-| `pnpm test` | Lance les tests Vitest (35 tests) |
+| `pnpm test` | Lance les tests Vitest (37 tests du moteur) |
 | `pnpm exec biome check .` | Lint + vérification du format |
 | `pnpm build` | Compile TypeScript (`tsc --noEmit`) + build Vite vers `dist/` |
 | `pnpm tb:lint` | `build` + lint `web-ext` de `dist/` (0 erreur attendu) |
@@ -97,7 +97,7 @@ src/
     background.ts        Orchestration : scan à l'affichage, badge, réponses au popup
   lib/
     detector.ts          Moteur de détection (pur, sans API Thunderbird) + ré-export des types
-    detector.test.ts     35 tests Vitest du moteur
+    detector.test.ts     Tests Vitest du moteur
   models/
     tracking.ts          Types du domaine : AnalysisResult, TrackingPixel, TrackingLink, TrackingResource
   popup/
@@ -156,3 +156,5 @@ les seuils et les pistes d'amélioration sont dans [DETECTION.md](DETECTION.md).
 [DETECTION.md](DETECTION.md) explique tout le fonctionnement de la détection
 (familles de menaces, règles de décision, helpers, limites) pour un développeur
 qui souhaite améliorer le projet.
+
+En cas de sélection multiple, seul le premier message est analysé ; le popup le précise. Un résultat sans alerte ne garantit pas l’absence de suivi.
