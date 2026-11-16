@@ -7,6 +7,20 @@ import {
 } from "./detector";
 
 describe("detectTrackingThreats", () => {
+	it("décode les séparateurs HTML dans les URL avant l'analyse", () => {
+		const result = detectTrackingThreats(
+			'<a href="https://example.com/page?x=1&amp;url=https%3A%2F%2Fexample.org&amp;mid=1">lien</a>',
+		);
+		expect(result.trackingLinks).toHaveLength(1);
+		expect(result.trackingLinks[0]?.url).toContain("&url=");
+	});
+
+	it("ne signale pas un lien légitime avec un séparateur encodé", () => {
+		const result = detectTrackingThreats(
+			'<a href="https://example.com/?x=1&amp;utm_source=news">lien</a>',
+		);
+		expect(result.trackingLinks).toHaveLength(0);
+	});
 	it("détecte un pixel de suivi classique (1×1 + nom de fichier)", () => {
 		const html =
 			`<img src="https://track.newsletter.com/open/pixel.gif?open_id=abc123" ` +

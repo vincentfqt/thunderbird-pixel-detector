@@ -181,6 +181,7 @@ function extractRemoteImages(html: string): ExtractedImage[] {
 		height: string | null,
 		style: string | null = null,
 	): void => {
+		url = normalizeUrl(url);
 		// Une même URL revient souvent plusieurs fois : on ne l'analyse qu'une fois.
 		if (!isRemoteUrl(url) || seen.has(url)) return;
 		seen.add(url);
@@ -283,7 +284,8 @@ function analyzeImage(
 function extractLinks(html: string): string[] {
 	const links = new Set<string>();
 	for (const match of html.matchAll(/<a\b[^>]*>/gi)) {
-		const href = getAttribute(match[0], "href");
+		const rawHref = getAttribute(match[0], "href");
+		const href = rawHref === null ? null : normalizeUrl(rawHref);
 		if (href !== null && isRemoteUrl(href)) {
 			links.add(href);
 		}
@@ -341,7 +343,9 @@ function extractRemoteResources(html: string): ExtractedResource[] {
 			new RegExp(`<${tagName}\\b[^>]*>`, "gi"),
 		)) {
 			const tag = match[0];
-			const url = getAttribute(tag, "src") ?? getAttribute(tag, "href") ?? "";
+			const url = normalizeUrl(
+				getAttribute(tag, "src") ?? getAttribute(tag, "href") ?? "",
+			);
 			if (!isRemoteUrl(url) || seen.has(url)) continue;
 			seen.add(url);
 
@@ -398,6 +402,11 @@ function analyzeResource(
 }
 
 // --- Helpers ---------------------------------------------------------------
+
+/** Décode les séparateurs HTML courants sans interpréter le document ni charger de contenu. */
+function normalizeUrl(url: string): string {
+	return url.replace(/&(?:amp|#0*38|#x0*26);/gi, "&");
+}
 
 /** Lit un attribut d'une balise HTML : name="…", name='…' ou name=…. */
 function getAttribute(tag: string, name: string): string | null {
